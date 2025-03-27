@@ -1,0 +1,51 @@
+name: ihr-django CI/CD
+on:
+  push:
+    tags:
+    - v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+
+    - v[0-9]+.[0-9]+.[0-9]+
+
+jobs:
+  build-and-push-dockerimages:
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [ihr-django]
+    permissions:
+      contents: read
+      packages: write
+    uses: Calance-US/calance-workflows/.github/workflows/build.yml@v3.0.0
+    with:
+      image_name: Calance-US/${{ matrix.project }}
+      image_registry: ${{ vars.IMAGE_REGISTRY }}
+      image_registry_username: ${{ vars.IMAGE_REGISTRY_USERNAME }}
+    secrets:
+      IMAGE_REGISTRY_PASSWORD: ${{ secrets.IMAGE_REGISTRY_PASSWORD }}
+
+  deploy-to-kubernetes:
+    needs: build-and-push-dockerimages
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [ihr-django]
+    permissions:
+      contents: read
+      packages: write
+    uses: Calance-US/calance-workflows/.github/workflows/deploy.yml@v3.0.0
+    with:
+      repository_name: ${{ github.event.repository.name }}
+      version: ${{ needs.build-and-push-dockerimages.outputs.version }}
+      release_name: ${{ matrix.project }}
+      image_name: Calance-US/${{ matrix.project }}
+      cluster_environment: ${{ needs.build-and-push-dockerimages.outputs.cluster_environment }}
+      commit_id: ${{ needs.build-and-push-dockerimages.outputs.commit_id }}
+      image_registry: ${{ vars.IMAGE_REGISTRY }}
+      jenkins_job_name: kubernetes-deploy-on-nutanix
+      workflows_release: v3.0.0
+      helm_values_repository: calance-services-helm-values
+      codeowners_email_ids: hreddy@calance.com
+    secrets:
+      JENKINS_URL: ${{ secrets.JENKINS_URL }}
+      JENKINS_USER: ${{ secrets.JENKINS_USER }}
+      JENKINS_TOKEN: ${{ secrets.JENKINS_TOKEN }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
